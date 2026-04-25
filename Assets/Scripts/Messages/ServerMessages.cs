@@ -55,7 +55,28 @@ public class StatusEffect
     public string id;
     public string name;
     public int remainingTicks;
-    public string icon;
+}
+
+[Serializable]
+public class CombatResultMessage
+{
+    public int tick;
+    public string encounterId;
+    public CombatResultEntry[] results;
+    public bool combatEnded;
+}
+
+[Serializable]
+public class CombatResultEntry
+{
+    public string actorId;
+    public string actorName;
+    public string action;
+    public string targetId;
+    public string targetName;
+    public int damage;
+    public int newHp;
+    public int maxHp;
 }
 
 // ── Combat State ──────────────────────────────────────────
@@ -82,17 +103,26 @@ public class CombatantSnapshot
     public bool isNPC;
     public string status;        // "fighting", "downed", "dead"
     public string currentTarget;
+    public TelegraphedAction telegraphedAction;
+}
+
+[Serializable]
+public class TelegraphedAction
+{
+    public string abilityName;
+    public int remainingTicks;
+    public string targetId;
 }
 
 [Serializable]
 public class TelegraphMessage
 {
-    public string encounterId;
-    public string actorId;
-    public string actorName;
-    public string actionType;
-    public string description;
-    public int tick;
+    public string creatureId;
+    public string creatureName;
+    public string abilityName;
+    public int remainingTicks;
+    public string targetId;
+    public string telegraphText;
 }
 
 // ── Room Switching & Zones ────────────────────────────────
@@ -108,16 +138,16 @@ public class RoomSwitchMessage
 [Serializable]
 public class RoomSwitchOptions
 {
-    public string zoneId;
-    public string entryRoomId;
+    public string roomId;
+    public int tier;
+    public string targetRoomSlug;
 }
 
 [Serializable]
 public class ZoneTransferMessage
 {
-    public string targetZoneId;
-    public string targetRoomId;
-    public string reason;
+    public string targetZoneSlug;
+    public string targetRoomSlug;
 }
 
 // ── Overlay / Death System ────────────────────────────────
@@ -139,8 +169,10 @@ public class PermadeathStats
     public string characterName;
     public int level;
     public int totalKills;
-    public int roomsExplored;
-    public long survivalTime;
+    public int totalDeaths;
+    public int survivedSeconds;
+    public string causeOfDeath;
+    public string zoneOfDeath;
 }
 
 // ── Inventory, Stash, Loadout ─────────────────────────────
@@ -149,38 +181,49 @@ public class PermadeathStats
 public class InventoryUpdateMessage
 {
     public ItemData[] items;
-    public int capacity;
+    public float currentWeight;
+    public float maxWeight;
 }
 
 [Serializable]
 public class StashUpdateMessage
 {
     public ItemData[] items;
-    public int capacity;
 }
 
 [Serializable]
 public class LoadoutUpdateMessage
 {
-    public EquipmentSlot[] slots;
+    public EquipmentSlots slots;
 }
 
 [Serializable]
 public class ItemData
 {
     public string id;
+    public string instanceId;
+    public string definitionId;
     public string name;
     public string description;
-    public string rarity;
-    public string itemType;
-    public string icon;
+    public string tier;
+    public string type;
+    public float weight;
+    public string[] allowedSlots;
 }
 
 [Serializable]
-public class EquipmentSlot
+public class EquipmentSlots
 {
-    public string slotName;
-    public ItemData item;      // null if empty
+    public ItemData head;
+    public ItemData chest;
+    public ItemData legs;
+    public ItemData feet;
+    public ItemData hands;
+    public ItemData weapon;
+    public ItemData offhand;
+    public ItemData ring1;
+    public ItemData ring2;
+    public ItemData amulet;
 }
 
 // ── Room Occupants ────────────────────────────────────────
@@ -198,8 +241,7 @@ public class CreatureInfo
     public string id;
     public string name;
     public string type;
-    public string status;
-    public string icon;
+    public bool aggressive;
 }
 
 [Serializable]
@@ -207,7 +249,7 @@ public class PlayerInfo
 {
     public string id;
     public string name;
-    public string status;
+    public bool disconnected;
 }
 
 // ── Exploration Map ───────────────────────────────────────
@@ -215,12 +257,15 @@ public class PlayerInfo
 [Serializable]
 public class ExplorationDataMessage
 {
+    public string type;
     public ExploredRoomData[] rooms;
+    public string currentRoomId;
 }
 
 [Serializable]
 public class ExplorationUpdateMessage
 {
+    public string type;
     public ExploredRoomData room;
 }
 
@@ -228,16 +273,22 @@ public class ExplorationUpdateMessage
 public class ExploredRoomData
 {
     public string roomId;
+    public string zoneSlug;
+    public string visitedAt;
     public string roomName;
     public string roomType;
-    public ExitMap[] exits;      // direction → roomId pairs
+    public SerializableExitMap exits;
 }
 
 [Serializable]
-public class ExitMap
+public class SerializableExitMap
 {
-    public string direction;
-    public string targetRoomId;
+    public string north;
+    public string south;
+    public string east;
+    public string west;
+    public string up;
+    public string down;
 }
 
 // ── Character Management ──────────────────────────────────
@@ -253,21 +304,47 @@ public class CharacterSummary
 {
     public string id;
     public string name;
-    public string archetype;
+    public string startingZoneSlug;
+    public string startingZoneName;
+    public string factionSlug;
+    public string factionName;
+    public bool isActive;
+    public string createdAt;
+    public string lastPlayedAt;
+    public TopSkillSummary[] topSkills;
+    public int totalRuns;
+    public BaseStatsMessage baseStats;
+    public CharacterEquipmentSummary equipment;
+    public int statPointsAvailable;
+}
+
+[Serializable]
+public class TopSkillSummary
+{
+    public string name;
     public int level;
 }
 
 [Serializable]
-public class CharacterCreatedMessage
+public class CharacterEquipmentSummary
 {
-    public string characterId;
-    public string name;
+    public CharacterEquipmentItem head;
+    public CharacterEquipmentItem chest;
+    public CharacterEquipmentItem legs;
+    public CharacterEquipmentItem feet;
+    public CharacterEquipmentItem hands;
+    public CharacterEquipmentItem weapon;
+    public CharacterEquipmentItem offhand;
+    public CharacterEquipmentItem ring1;
+    public CharacterEquipmentItem ring2;
+    public CharacterEquipmentItem amulet;
 }
 
 [Serializable]
-public class CharacterErrorMessage
+public class CharacterEquipmentItem
 {
-    public string error;
+    public string itemId;
+    public string name;
 }
 
 // ── Effective Stats ───────────────────────────────────────
@@ -275,11 +352,26 @@ public class CharacterErrorMessage
 [Serializable]
 public class EffectiveStatsMessage
 {
-    public int attack;
-    public int defense;
-    public int speed;
     public int maxHp;
-    public int maxStamina;
+    public int attack;
+    public int armour;
+    public int shieldBlock;
+    public int dodge;
+    public BaseStatsMessage baseStats;
+    public int statPointsAvailable;
+}
+
+[Serializable]
+public class BaseStatsMessage
+{
+    public int maxHp;
+    public int unarmed;
+    public int oneHanded;
+    public int twoHanded;
+    public int ranged;
+    public int shieldBlock;
+    public int dodge;
+    public int armour;
 }
 
 // ── Flag State ────────────────────────────────────────────
@@ -287,8 +379,14 @@ public class EffectiveStatsMessage
 [Serializable]
 public class FlagStateMessage
 {
-    public string flagName;
-    public bool value;
+    public UserFlags flags;
+}
+
+[Serializable]
+public class UserFlags
+{
+    public bool anon;
+    public bool rp;
 }
 
 // ── Player List & Help ────────────────────────────────────
@@ -296,19 +394,34 @@ public class FlagStateMessage
 [Serializable]
 public class PlayerListMessage
 {
-    public PlayerInfo[] players;
+    public PlayerListEntry[] players;
+}
+
+[Serializable]
+public class PlayerListEntry
+{
+    public string name;
+    public int level;
+    public string @class;
+    public string zone;
+    public string[] flags;
+    public bool anon;
+    public string posture;
 }
 
 [Serializable]
 public class HelpDataMessage
 {
-    public HelpEntry[] entries;
+    public HelpEntry[] commands;
+    public string focusCommand;
 }
 
 [Serializable]
 public class HelpEntry
 {
-    public string command;
+    public string name;
     public string description;
     public string usage;
+    public string[] aliases;
+    public string category;
 }

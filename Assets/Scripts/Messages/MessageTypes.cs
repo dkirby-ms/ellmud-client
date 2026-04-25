@@ -10,16 +10,6 @@ public static class MessageTypes
     public const string SWAP_ITEM = "swap_item";
     public const string TOGGLE_FLAG = "toggle_flag";
 
-    // Character Management
-    public const string CHARACTER_CREATE = "character_create";
-    public const string CHARACTER_SELECT = "character_select";
-    public const string CHARACTER_DELETE = "character_delete";
-    public const string CHARACTER_LIST = "character_list";
-    public const string CHARACTER_LIST_RESPONSE = "character_list_response";
-    public const string CHARACTER_CREATED = "character_created";
-    public const string CHARACTER_DELETED = "character_deleted";
-    public const string CHARACTER_ERROR = "character_error";
-
     // Server → Client
     public const string NARRATE = "narrate";
     public const string ROOM_HEADER = "room_header";

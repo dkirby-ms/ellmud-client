@@ -11,7 +11,7 @@ public class CommandMessage
 public class EquipItemMessage
 {
     public string itemId;
-    public string slot;
+    public string targetSlot;
 }
 
 [Serializable]
@@ -23,25 +23,20 @@ public class UnequipItemMessage
 [Serializable]
 public class SwapItemMessage
 {
-    public string fromSlot;
-    public string toSlot;
+    public string itemId;
+    public string targetSlot;
+}
+
+[Serializable]
+public class ToggleFlagMessage
+{
+    public string flag;
+    public bool enabled;
 }
 
 [Serializable]
 public class CharacterCreateMessage
 {
     public string name;
-    public string archetype;
-}
-
-[Serializable]
-public class CharacterSelectMessage
-{
-    public string characterId;
-}
-
-[Serializable]
-public class CharacterDeleteMessage
-{
-    public string characterId;
+    public string startingZoneSlug;
 }

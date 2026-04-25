@@ -18,17 +18,10 @@ public static class GameEvents
     public static Action<ExplorationDataMessage> OnExplorationData;
     public static Action<ExplorationUpdateMessage> OnExplorationUpdate;
     public static Action<EffectiveStatsMessage> OnEffectiveStats;
-    public static Action<CombatEventData> OnCombatResult;
+    public static Action<CombatResultMessage> OnCombatResult;
     public static Action<FlagStateMessage> OnFlagState;
     public static Action<HelpDataMessage> OnHelpData;
     public static Action<PlayerListMessage> OnPlayerList;
-
-    // Character management events
-    public static Action<CharacterListResponse> OnCharacterList;
-    public static Action<CharacterCreatedMessage> OnCharacterCreated;
-    public static Action<CharacterErrorMessage> OnCharacterError;
-    public static Action OnCharacterDeleted;
-    public static Action OnRequestCharacterSelect;
 
     // Connection lifecycle
     public static Action OnConnected;

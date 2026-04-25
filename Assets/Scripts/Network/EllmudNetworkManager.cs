@@ -16,6 +16,9 @@ public class EllmudNetworkManager : MonoBehaviour
     public bool IsConnected => currentRoom != null;
     public string CurrentRoomType { get; private set; }
 
+    private const string RefugeRoomName = "zone:the-refuge";
+    private const string ProceduralZoneRoomName = "zone";
+
     private void Awake()
     {
         if (Instance != null && Instance != this)
@@ -31,54 +34,111 @@ public class EllmudNetworkManager : MonoBehaviour
     // ── Join Refuge (safe hub) ────────────────────────────
     public async Task JoinRefuge()
     {
-        var options = new Dictionary<string, object>
-        {
-            { "token", AuthService.Instance.Token }
-        };
-
-        try
-        {
-            currentRoom = await client.JoinOrCreate(
-                "refuge", options);
-            CurrentRoomType = "refuge";
-            RegisterMessageHandlers();
-            RegisterLifecycleHandlers();
-            GameEvents.OnConnected?.Invoke();
-        }
-        catch (System.Exception ex)
-        {
-            Debug.LogError($"Failed to join Refuge: {ex.Message}");
-            GameEvents.OnError?.Invoke(ex.Message);
-        }
+        await JoinRoom(RefugeRoomName, BuildJoinOptions(zoneSlug: "the-refuge"));
     }
 
     // ── Join Zone (dangerous area) ────────────────────────
     public async Task JoinZone(
-        string zoneId = null, string entryRoomId = null)
+        string zoneSlug = null,
+        string roomId = null,
+        string targetRoomSlug = null,
+        int? tier = null)
+    {
+        await JoinRoom(
+            ProceduralZoneRoomName,
+            BuildJoinOptions(zoneSlug, roomId, targetRoomSlug, tier));
+    }
+
+    /// <summary>
+    /// Resolves the authenticated player's spawn target via REST and joins it.
+    /// </summary>
+    public async Task EnterActiveCharacterWorld()
+    {
+        var spawnZone = await AuthService.Instance.FetchSpawnZone();
+        await JoinSpawnTarget(spawnZone);
+    }
+
+    /// <summary>
+    /// Selects a character through the REST API, then enters the world.
+    /// </summary>
+    /// <param name="characterId">The character identifier to activate.</param>
+    /// <returns>The selected character summary.</returns>
+    public async Task<CharacterSummary> SelectCharacterAndEnterWorld(string characterId)
+    {
+        var selectedCharacter = await AuthService.Instance.SelectCharacter(characterId);
+        await EnterActiveCharacterWorld();
+        return selectedCharacter;
+    }
+
+    private Dictionary<string, object> BuildJoinOptions(
+        string zoneSlug = null,
+        string roomId = null,
+        string targetRoomSlug = null,
+        int? tier = null)
     {
         var options = new Dictionary<string, object>
         {
             { "token", AuthService.Instance.Token }
         };
-        if (zoneId != null)
-            options["zoneId"] = zoneId;
-        if (entryRoomId != null)
-            options["entryRoomId"] = entryRoomId;
 
+        if (!string.IsNullOrEmpty(zoneSlug))
+            options["zoneSlug"] = zoneSlug;
+        if (!string.IsNullOrEmpty(roomId))
+            options["roomId"] = roomId;
+        if (!string.IsNullOrEmpty(targetRoomSlug))
+            options["targetRoomSlug"] = targetRoomSlug;
+        if (tier.HasValue)
+            options["tier"] = tier.Value;
+
+        return options;
+    }
+
+    private async Task JoinRoom(string roomName, Dictionary<string, object> options)
+    {
         try
         {
-            currentRoom = await client.JoinOrCreate(
-                "zone", options);
-            CurrentRoomType = "zone";
+            if (currentRoom != null)
+                await LeaveCurrentRoom();
+
+            currentRoom = await client.JoinOrCreate(roomName, options);
+            CurrentRoomType = roomName;
             RegisterMessageHandlers();
             RegisterLifecycleHandlers();
             GameEvents.OnConnected?.Invoke();
         }
         catch (System.Exception ex)
         {
-            Debug.LogError($"Failed to join Zone: {ex.Message}");
+            Debug.LogError($"Failed to join {roomName}: {ex.Message}");
             GameEvents.OnError?.Invoke(ex.Message);
         }
+    }
+
+    private async Task JoinSpawnTarget(AuthService.SpawnZoneInfo spawnZone)
+    {
+        if (spawnZone == null)
+        {
+            await JoinRefuge();
+            return;
+        }
+
+        var roomName = string.IsNullOrEmpty(spawnZone.target)
+            ? RefugeRoomName
+            : spawnZone.target;
+        var zoneSlug = string.IsNullOrEmpty(spawnZone.zoneSlug)
+            ? ExtractZoneSlug(roomName)
+            : spawnZone.zoneSlug;
+
+        await JoinRoom(roomName, BuildJoinOptions(zoneSlug: zoneSlug));
+    }
+
+    private string ExtractZoneSlug(string roomName)
+    {
+        if (string.IsNullOrEmpty(roomName))
+            return null;
+
+        return roomName.StartsWith("zone:")
+            ? roomName.Substring("zone:".Length)
+            : null;
     }
 
     // ── Send a text command ───────────────────────────────
@@ -106,24 +166,29 @@ public class EllmudNetworkManager : MonoBehaviour
         Debug.Log($"Room switch → {msg.target} ({msg.reason})");
         await LeaveCurrentRoom();
 
-        if (msg.target == "zone")
-        {
-            string zoneId = msg.options?.zoneId;
-            string entryRoom = msg.options?.entryRoomId;
-            await JoinZone(zoneId, entryRoom);
-        }
-        else
-        {
-            await JoinRefuge();
-        }
+        var options = BuildJoinOptions(
+            roomId: msg.options?.roomId,
+            targetRoomSlug: msg.options?.targetRoomSlug,
+            tier: msg.options != null && msg.options.tier > 0 ? msg.options.tier : (int?)null);
+
+        if (msg.target.StartsWith("zone:") && !options.ContainsKey("zoneSlug"))
+            options["zoneSlug"] = msg.target.Substring("zone:".Length);
+
+        await JoinRoom(msg.target, options);
     }
 
     private async void HandleZoneTransfer(ZoneTransferMessage msg)
     {
         Debug.Log(
-            $"Zone transfer → {msg.targetZoneId} ({msg.reason})");
+            $"Zone transfer → {msg.targetZoneSlug}:{msg.targetRoomSlug}");
         await LeaveCurrentRoom();
-        await JoinZone(msg.targetZoneId, msg.targetRoomId);
+
+        var targetRoomName = $"zone:{msg.targetZoneSlug}";
+        await JoinRoom(
+            targetRoomName,
+            BuildJoinOptions(
+                zoneSlug: msg.targetZoneSlug,
+                targetRoomSlug: msg.targetRoomSlug));
     }
 
     public async Task LeaveCurrentRoom()
@@ -157,6 +222,9 @@ public class EllmudNetworkManager : MonoBehaviour
             msg => GameEvents.OnPlayerState?.Invoke(msg));
 
         // Combat
+        room.OnMessage<CombatResultMessage>(
+            MessageTypes.COMBAT_RESULT,
+            msg => GameEvents.OnCombatResult?.Invoke(msg));
         room.OnMessage<CombatStateMessage>(
             MessageTypes.COMBAT_STATE,
             msg => GameEvents.OnCombatState?.Invoke(msg));
@@ -208,17 +276,6 @@ public class EllmudNetworkManager : MonoBehaviour
         room.OnMessage<FlagStateMessage>(
             MessageTypes.FLAG_STATE,
             msg => GameEvents.OnFlagState?.Invoke(msg));
-
-        // Character management
-        room.OnMessage<CharacterListResponse>(
-            MessageTypes.CHARACTER_LIST_RESPONSE,
-            msg => GameEvents.OnCharacterList?.Invoke(msg));
-        room.OnMessage<CharacterCreatedMessage>(
-            MessageTypes.CHARACTER_CREATED,
-            msg => GameEvents.OnCharacterCreated?.Invoke(msg));
-        room.OnMessage<CharacterErrorMessage>(
-            MessageTypes.CHARACTER_ERROR,
-            msg => GameEvents.OnCharacterError?.Invoke(msg));
 
         // Help and player list
         room.OnMessage<HelpDataMessage>(
