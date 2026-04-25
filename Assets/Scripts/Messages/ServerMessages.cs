@@ -36,6 +36,12 @@ public class RoomHeaderMessage
     public string roomSlug;
 }
 
+[Serializable]
+public class ZoneStateMessage
+{
+    public string state;
+}
+
 // ── Player State ──────────────────────────────────────────
 
 [Serializable]

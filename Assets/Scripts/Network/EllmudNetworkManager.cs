@@ -12,6 +12,8 @@ public class EllmudNetworkManager : MonoBehaviour
 
     private Client client;
     private Room<NoState> currentRoom;
+    private string lastJoinedRoomName;
+    private Dictionary<string, object> lastJoinOptions;
 
     public bool IsConnected => currentRoom != null;
     public string CurrentRoomType { get; private set; }
@@ -52,10 +54,10 @@ public class EllmudNetworkManager : MonoBehaviour
     /// <summary>
     /// Resolves the authenticated player's spawn target via REST and joins it.
     /// </summary>
-    public async Task EnterActiveCharacterWorld()
+    public async Task EnterActiveCharacterWorld(string characterId = null)
     {
         var spawnZone = await AuthService.Instance.FetchSpawnZone();
-        await JoinSpawnTarget(spawnZone);
+        await JoinSpawnTarget(spawnZone, characterId);
     }
 
     /// <summary>
@@ -66,7 +68,7 @@ public class EllmudNetworkManager : MonoBehaviour
     public async Task<CharacterSummary> SelectCharacterAndEnterWorld(string characterId)
     {
         var selectedCharacter = await AuthService.Instance.SelectCharacter(characterId);
-        await EnterActiveCharacterWorld();
+        await EnterActiveCharacterWorld(selectedCharacter?.id);
         return selectedCharacter;
     }
 
@@ -74,12 +76,17 @@ public class EllmudNetworkManager : MonoBehaviour
         string zoneSlug = null,
         string roomId = null,
         string targetRoomSlug = null,
-        int? tier = null)
+        int? tier = null,
+        string characterId = null)
     {
         var options = new Dictionary<string, object>
         {
             { "token", AuthService.Instance.Token }
         };
+
+        var resolvedCharacterId = ResolveCharacterId(characterId);
+        if (!string.IsNullOrEmpty(resolvedCharacterId))
+            options["characterId"] = resolvedCharacterId;
 
         if (!string.IsNullOrEmpty(zoneSlug))
             options["zoneSlug"] = zoneSlug;
@@ -93,7 +100,19 @@ public class EllmudNetworkManager : MonoBehaviour
         return options;
     }
 
-    private async Task JoinRoom(string roomName, Dictionary<string, object> options)
+    private string ResolveCharacterId(string explicitCharacterId = null)
+    {
+        if (!string.IsNullOrEmpty(explicitCharacterId))
+            return explicitCharacterId;
+
+        var auth = AuthService.Instance;
+        if (auth?.ActiveCharacter != null && !string.IsNullOrEmpty(auth.ActiveCharacter.id))
+            return auth.ActiveCharacter.id;
+
+        return null;
+    }
+
+    private async Task<bool> JoinRoom(string roomName, Dictionary<string, object> options)
     {
         try
         {
@@ -102,18 +121,50 @@ public class EllmudNetworkManager : MonoBehaviour
 
             currentRoom = await client.JoinOrCreate(roomName, options);
             CurrentRoomType = roomName;
+            lastJoinedRoomName = roomName;
+            lastJoinOptions = CloneJoinOptions(options);
             RegisterMessageHandlers();
             RegisterLifecycleHandlers();
             GameEvents.OnConnected?.Invoke();
+            return true;
         }
         catch (System.Exception ex)
         {
             Debug.LogError($"Failed to join {roomName}: {ex.Message}");
             GameEvents.OnError?.Invoke(ex.Message);
+            return false;
         }
     }
 
-    private async Task JoinSpawnTarget(AuthService.SpawnZoneInfo spawnZone)
+    public async Task<bool> ReconnectToLastRoom(int maxAttempts = 3)
+    {
+        if (string.IsNullOrEmpty(lastJoinedRoomName) || lastJoinOptions == null)
+        {
+            GameEvents.OnConnectionError?.Invoke("No previous room context found for reconnect.");
+            return false;
+        }
+
+        var attempts = Mathf.Max(1, maxAttempts);
+        for (var i = 1; i <= attempts; i++)
+        {
+            if (await JoinRoom(lastJoinedRoomName, CloneJoinOptions(lastJoinOptions)))
+                return true;
+        }
+
+        GameEvents.OnConnectionError?.Invoke(
+            $"Reconnect failed after {attempts} attempt(s).");
+        return false;
+    }
+
+    private Dictionary<string, object> CloneJoinOptions(Dictionary<string, object> source)
+    {
+        if (source == null)
+            return null;
+
+        return new Dictionary<string, object>(source);
+    }
+
+    private async Task JoinSpawnTarget(AuthService.SpawnZoneInfo spawnZone, string characterId = null)
     {
         if (spawnZone == null)
         {
@@ -128,7 +179,7 @@ public class EllmudNetworkManager : MonoBehaviour
             ? ExtractZoneSlug(roomName)
             : spawnZone.zoneSlug;
 
-        await JoinRoom(roomName, BuildJoinOptions(zoneSlug: zoneSlug));
+        await JoinRoom(roomName, BuildJoinOptions(zoneSlug: zoneSlug, characterId: characterId));
     }
 
     private string ExtractZoneSlug(string roomName)
@@ -215,6 +266,9 @@ public class EllmudNetworkManager : MonoBehaviour
         room.OnMessage<RoomHeaderMessage>(
             MessageTypes.ROOM_HEADER,
             msg => GameEvents.OnRoomHeader?.Invoke(msg));
+        room.OnMessage<ZoneStateMessage>(
+            MessageTypes.ZONE_STATE,
+            msg => GameEvents.OnZoneState?.Invoke(msg));
 
         // Player vitals
         room.OnMessage<PlayerStateMessage>(

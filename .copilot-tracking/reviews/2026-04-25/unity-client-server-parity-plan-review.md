@@ -9,14 +9,18 @@ ms.topic: reference
 
 ## Request Fulfillment
 
-* Review the Unity-based thick client project: complete for the transport layer and current networking surface
-* Bring it up to par with the actual Ellmud server: partial
+* Review the Unity-based thick client project: complete for transport and runtime bootstrap surfaces
+* Bring it up to par with the actual Ellmud server: partial, but materially advanced
 
 ## Completed Work
 
 * Aligned the Unity DTOs with the current shared protocol for the touched message types
 * Updated room switching to consume roomId, targetRoomSlug, zone-prefixed hub targets, and zone-transfer slugs
 * Validated the touched C# files with focused diagnostics
+* Added character-scoped world-entry propagation (`characterId`) for selected-character gameplay identity
+* Added runtime bootstrap provisioning for Auth, Network, GameState, and HUD in fresh scenes
+* Added smoke harness workflow for login, world entry, command send, disconnect, and reconnect checks
+* Expanded HUD/event handling to include zone state, combat panel rendering, occupants summary, loadout summaries, help overlays, and who-list overlays
 
 ## Validation Output
 
@@ -26,11 +30,19 @@ ms.topic: reference
   * Assets/Scripts/Network/GameEvents.cs
   * Assets/Scripts/Network/EllmudNetworkManager.cs
 
+* get_errors on the continuation files returned no errors for:
+  * Assets/Scripts/Messages/ServerMessages.cs
+  * Assets/Scripts/Network/GameEvents.cs
+  * Assets/Scripts/Network/EllmudNetworkManager.cs
+  * Assets/Scripts/UI/GameHUDController.cs
+  * Assets/Scripts/UI/ClientRuntimeBootstrap.cs
+  * Assets/Scripts/UI/ClientSmokeHarness.cs
+
 ## Remaining Gaps
 
-* Character selection and creation in the Unity project are still modeled around websocket messages, while the live server uses REST endpoints plus spawn-zone bootstrap behavior
-* The Unity repository still lacks the broader UI and state orchestration needed to fully exploit the now-aligned payloads for help, who list, inventory/loadout, and richer combat state
-* There is no automated regression check preventing future DTO drift between the Unity client and the shared protocol
+* The current bootstrap relies on `Resources/UI` assets and script-driven setup; a committed Unity scene/prefab workflow is still needed for production ergonomics
+* Overlay rendering is functional but still basic compared to the richer web client presentation and interaction model
+* There is still no CI-level automated contract check to prevent future DTO drift between Unity and `@ellmud/shared`
 
 ## Overall Status
 

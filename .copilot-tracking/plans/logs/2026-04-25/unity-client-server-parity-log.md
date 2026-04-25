@@ -30,6 +30,13 @@ Focus on protocol-layer parity first because the current client is infrastructur
   * Updated EllmudNetworkManager to join zone-prefixed hub rooms, honor roomId and targetRoomSlug, and route zone transfers to zone:{slug}
   * Registered COMBAT_RESULT so the Unity event surface now matches its declared GameEvents entry
 * Focused validation via workspace diagnostics reported no errors in the touched files
+* Continuation slice completed for all previously suggested follow-on work:
+  * Added character-scoped join propagation through world-entry and spawn-target pathways
+  * Added reconnect helper and zone-state event wiring to the network/event surface
+  * Added `GameHUDController` support for combat state, occupants, loadout updates, help overlays, and who-list overlays
+  * Added `ClientRuntimeBootstrap` to stand up required runtime objects in fresh scenes
+  * Added `ClientSmokeHarness` for lightweight login → enter world → command → reconnect validation
+  * Added runtime HUD assets under `Assets/Resources/UI` for bootstrap loading
 
 ## Deviations
 
@@ -38,6 +45,6 @@ Focus on protocol-layer parity first because the current client is infrastructur
 
 ## Suggested Follow-on Work
 
-* Replace the Unity character create/select/delete flow with the server's REST endpoints and spawn-zone bootstrap flow
-* Add a small automated protocol regression harness so DTO drift is caught before runtime
-* Expand Unity state/UI handling to consume the richer room, help, loadout, and who-list payloads now arriving from the server
+* Create a concrete Unity scene asset that references the bootstrap and HUD prefabs for out-of-the-box editor play mode
+* Add protocol-contract assertions or generated DTO checks against `packages/shared` exports to catch drift automatically in CI
+* Expand overlay UX for multi-section views (inventory/loadout/help/who) instead of terminal-only summaries

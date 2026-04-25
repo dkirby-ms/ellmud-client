@@ -5,6 +5,7 @@ public static class GameEvents
     // Server → Client events
     public static Action<NarrateMessage> OnNarrate;
     public static Action<RoomHeaderMessage> OnRoomHeader;
+    public static Action<ZoneStateMessage> OnZoneState;
     public static Action<PlayerStateMessage> OnPlayerState;
     public static Action<CombatStateMessage> OnCombatState;
     public static Action<TelegraphMessage> OnTelegraph;
