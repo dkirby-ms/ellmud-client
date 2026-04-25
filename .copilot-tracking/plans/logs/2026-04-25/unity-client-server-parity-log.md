@@ -37,6 +37,10 @@ Focus on protocol-layer parity first because the current client is infrastructur
   * Added `ClientRuntimeBootstrap` to stand up required runtime objects in fresh scenes
   * Added `ClientSmokeHarness` for lightweight login → enter world → command → reconnect validation
   * Added runtime HUD assets under `Assets/Resources/UI` for bootstrap loading
+* Final continuation iteration delivered the remaining workflow and quality items:
+  * Added `PlayableBootstrapSceneCreator` editor workflow for generating a committed playable bootstrap scene
+  * Added root `check:unity-protocol` CI check script and integrated it into `test:ci`
+  * Expanded overlay UX from one-shot summaries to interactive tabbed panels with list/detail interaction
 
 ## Deviations
 
@@ -46,5 +50,6 @@ Focus on protocol-layer parity first because the current client is infrastructur
 ## Suggested Follow-on Work
 
 * Create a concrete Unity scene asset that references the bootstrap and HUD prefabs for out-of-the-box editor play mode
-* Add protocol-contract assertions or generated DTO checks against `packages/shared` exports to catch drift automatically in CI
-* Expand overlay UX for multi-section views (inventory/loadout/help/who) instead of terminal-only summaries
+* Add generated code or schema-driven DTO binding from `@ellmud/shared` to reduce manual duplication in Unity message classes
+* Add smoke-test result persistence (log artifact or JSON report) for repeatable QA evidence across sessions
+* Add richer per-panel controls (filter/sort/search) for inventory, stash, and who-list overlays

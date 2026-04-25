@@ -207,5 +207,57 @@
     align-self: center;
 }
 
+.overlay-tabs {
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.overlay-tab-button {
+    margin-right: 6px;
+    margin-bottom: 6px;
+    padding: 4px 8px;
+    background-color: rgb(52, 52, 70);
+    color: rgb(200, 200, 210);
+    border-width: 0;
+    border-radius: 4px;
+}
+
+.overlay-tab-button-active {
+    background-color: rgb(88, 88, 118);
+}
+
+.overlay-body {
+    flex-direction: row;
+    min-height: 220px;
+    margin-bottom: 10px;
+}
+
+.overlay-list {
+    width: 250px;
+    margin-right: 10px;
+}
+
+.overlay-item-button {
+    -unity-text-align: upper-left;
+    justify-content: flex-start;
+    margin-bottom: 4px;
+    padding: 4px 6px;
+    background-color: rgb(42, 42, 58);
+    color: rgb(200, 200, 210);
+    border-width: 0;
+    border-radius: 3px;
+}
+
+.overlay-detail {
+    flex-grow: 1;
+    white-space: normal;
+    color: rgb(210, 210, 220);
+    font-size: 13px;
+    padding: 6px;
+    background-color: rgb(24, 24, 34);
+    border-radius: 4px;
+}
+
 /* ===== Utility ===== */
 .hidden { display: none; }
