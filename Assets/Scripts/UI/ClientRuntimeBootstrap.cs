@@ -13,7 +13,7 @@ public static class ClientRuntimeBootstrap
         EnsureComponent<EllmudNetworkManager>("EllmudNetworkManager");
         EnsureComponent<GameStateManager>("GameStateManager");
 
-        if (Object.FindObjectOfType<GameHUDController>() != null)
+        if (Object.FindAnyObjectByType<GameHUDController>() != null)
             return;
 
         var panelSettings = Resources.Load<PanelSettings>("UI/PanelSettings");
@@ -38,7 +38,7 @@ public static class ClientRuntimeBootstrap
 
     private static void EnsureComponent<T>(string objectName) where T : Component
     {
-        if (Object.FindObjectOfType<T>() != null)
+        if (Object.FindAnyObjectByType<T>() != null)
             return;
 
         var go = new GameObject(objectName);

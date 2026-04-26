@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Colyseus;
+using Colyseus.Schema;
 using UnityEngine;
 
 public class EllmudNetworkManager : MonoBehaviour
@@ -11,7 +12,9 @@ public class EllmudNetworkManager : MonoBehaviour
     private string serverEndpoint = "ws://localhost:2567";
 
     private Client client;
-    private Room<NoState> currentRoom;
+    // Use DynamicSchema to tolerate server schema changes without requiring
+    // generated C# schema classes for this message-driven client.
+    private Room<DynamicSchema> currentRoom;
     private string lastJoinedRoomName;
     private Dictionary<string, object> lastJoinOptions;
 
@@ -119,7 +122,7 @@ public class EllmudNetworkManager : MonoBehaviour
             if (currentRoom != null)
                 await LeaveCurrentRoom();
 
-            currentRoom = await client.JoinOrCreate(roomName, options);
+            currentRoom = await client.JoinOrCreate<DynamicSchema>(roomName, options);
             CurrentRoomType = roomName;
             lastJoinedRoomName = roomName;
             lastJoinOptions = CloneJoinOptions(options);

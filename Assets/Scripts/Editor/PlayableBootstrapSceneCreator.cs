@@ -19,6 +19,13 @@ internal static class PlayableBootstrapSceneCreator
 
         var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
+        var cam = new GameObject("Main Camera");
+        var camera = cam.AddComponent<Camera>();
+        camera.clearFlags = CameraClearFlags.SolidColor;
+        camera.backgroundColor = new Color(0.07f, 0.07f, 0.09f);
+        cam.AddComponent<AudioListener>();
+        cam.tag = "MainCamera";
+
         CreateSystemObject<AuthService>("AuthService");
         CreateSystemObject<EllmudNetworkManager>("EllmudNetworkManager");
         CreateSystemObject<GameStateManager>("GameStateManager");
@@ -28,6 +35,7 @@ internal static class PlayableBootstrapSceneCreator
         uiDocument.panelSettings = AssetDatabase.LoadAssetAtPath<PanelSettings>(PanelSettingsPath);
         uiDocument.visualTreeAsset = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(GameHudPath);
         hud.AddComponent<GameHUDController>();
+        hud.AddComponent<RoomBackgroundController>();
         hud.AddComponent<ClientSmokeHarness>();
 
         EditorSceneManager.SaveScene(scene, ScenePath);

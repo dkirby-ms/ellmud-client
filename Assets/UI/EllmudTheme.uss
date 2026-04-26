@@ -1,3 +1,81 @@
+/* ===== Room Background Layer ===== */
+.room-background {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background-color: rgb(18, 18, 24);
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: flex-start;
+    padding: 16px;
+    -unity-picking-mode: ignore;
+}
+
+/* Vignette overlay - darkens edges */
+.room-bg-vignette {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.38);
+    -unity-picking-mode: ignore;
+}
+
+/* Room type badge in top-right of background */
+.room-type-info {
+    flex-direction: row;
+    align-items: center;
+    background-color: rgba(0, 0, 0, 0.55);
+    border-radius: 4px;
+    padding: 4px 10px 4px 8px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.08);
+}
+.room-type-badge {
+    font-size: 18px;
+    color: rgb(220, 200, 160);
+    margin-right: 6px;
+}
+.room-type-label {
+    font-size: 11px;
+    color: rgb(160, 150, 130);
+    -unity-font-style: italic;
+}
+
+/* ── Per room-type background colors ── */
+.room-entry        { background-color: rgb(22, 28, 38); }
+.room-corridor     { background-color: rgb(17, 18, 22); }
+.room-junction     { background-color: rgb(20, 20, 28); }
+.room-dead-end     { background-color: rgb(14, 12, 18); }
+.room-boss         { background-color: rgb(38, 8, 12); }
+.room-stash        { background-color: rgb(26, 24, 12); }
+.room-board        { background-color: rgb(18, 22, 26); }
+.room-market       { background-color: rgb(28, 24, 14); }
+.room-crafting     { background-color: rgb(34, 16, 8); }
+.room-training     { background-color: rgb(12, 18, 32); }
+.room-contracts    { background-color: rgb(14, 24, 24); }
+.room-infirmary    { background-color: rgb(10, 26, 18); }
+.room-armoury      { background-color: rgb(20, 22, 26); }
+.room-war          { background-color: rgb(32, 12, 12); }
+.room-inn          { background-color: rgb(30, 20, 10); }
+.room-sandbox      { background-color: rgb(16, 14, 30); }
+.room-arena        { background-color: rgb(22, 10, 30); }
+.room-stats        { background-color: rgb(14, 16, 30); }
+.room-unknown      { background-color: rgb(18, 18, 24); }
+
+/* ── Room transition fade overlay ── */
+.room-fade-overlay {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background-color: rgb(0, 0, 0);
+    opacity: 0;
+    -unity-picking-mode: ignore;
+    transition-property: opacity;
+    transition-duration: 0.3s;
+    transition-timing-function: ease-in-out;
+    /* sit above the background but below the overlay-container */
+    -unity-sort-order: 1;
+}
+.room-fade-in  { opacity: 1; }
+.room-fade-out { opacity: 0; }
+
 /* ===== Global Reset & Root ===== */
 .root-container {
     flex-grow: 1;
@@ -259,5 +337,156 @@
     border-radius: 4px;
 }
 
+.overlay-input {
+    margin-bottom: 8px;
+}
+
+.overlay-button-row {
+    flex-direction: row;
+    justify-content: center;
+    margin-top: 6px;
+}
+
+.overlay-button-row .overlay-button {
+    margin-right: 8px;
+}
+
+.overlay-status {
+    font-size: 12px;
+    color: rgb(170, 170, 190);
+    margin-bottom: 8px;
+}
+
+.character-button {
+    -unity-text-align: upper-left;
+    justify-content: flex-start;
+    margin-bottom: 4px;
+    padding: 4px 8px;
+    background-color: rgb(42, 42, 58);
+    color: rgb(210, 210, 220);
+    border-width: 0;
+    border-radius: 3px;
+}
+
+.character-button-active {
+    background-color: rgb(88, 88, 118);
+}
+
 /* ===== Utility ===== */
 .hidden { display: none; }
+
+/* ===== Minimap ===== */
+.minimap-section {
+    flex-grow: 1;
+    margin-top: 8px;
+    flex-direction: column;
+}
+.minimap-section-title { margin-bottom: 4px; }
+.minimap-container {
+    flex-grow: 1;
+    background-color: rgb(16, 16, 24);
+    border-width: 1px;
+    border-color: rgb(50, 50, 70);
+    border-radius: 3px;
+    min-height: 110px;
+}
+
+/* ===== Ability Bar ===== */
+.ability-bar {
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 6px 12px;
+    background-color: rgb(20, 20, 30);
+    border-top-width: 1px;
+    border-top-color: rgb(60, 60, 80);
+}
+.ability-slot {
+    width: 56px;
+    height: 56px;
+    background-color: rgb(28, 28, 40);
+    border-width: 1px;
+    border-color: rgb(60, 60, 80);
+    border-radius: 4px;
+    margin: 0 3px;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+}
+.ability-slot:hover { background-color: rgb(40, 40, 58); }
+.ability-slot--active {
+    border-color: rgb(200, 180, 100);
+    background-color: rgb(42, 38, 18);
+}
+.ability-key {
+    font-size: 9px;
+    color: rgb(120, 120, 140);
+    position: absolute;
+    top: 2px;
+    right: 4px;
+}
+.ability-name {
+    font-size: 10px;
+    color: rgb(180, 180, 200);
+    -unity-text-align: middle-center;
+    white-space: normal;
+}
+
+/* ===== Equipment Overlay ===== */
+.equipment-slot-row {
+    flex-direction: row;
+    align-items: center;
+    padding: 6px 4px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(50, 50, 70);
+}
+.equipment-slot-label {
+    width: 80px;
+    font-size: 11px;
+    color: rgb(120, 120, 140);
+    -unity-font-style: bold;
+}
+.equipment-slot-item {
+    flex-grow: 1;
+    font-size: 12px;
+    color: rgb(200, 200, 210);
+}
+.equipment-slot-item--empty {
+    color: rgb(70, 70, 90);
+    -unity-font-style: italic;
+}
+.equipment-unequip-button {
+    font-size: 10px;
+    padding: 2px 8px;
+    background-color: rgb(80, 40, 40);
+    color: rgb(200, 150, 150);
+    border-width: 0;
+    border-radius: 3px;
+}
+
+/* ===== Inventory Overlay ===== */
+.inventory-item-row {
+    flex-direction: row;
+    align-items: center;
+    padding: 5px 4px;
+    border-bottom-width: 1px;
+    border-bottom-color: rgb(40, 40, 58);
+}
+.inventory-item-name {
+    flex-grow: 1;
+    font-size: 12px;
+    color: rgb(200, 200, 210);
+}
+.inventory-item-meta {
+    font-size: 10px;
+    color: rgb(120, 120, 140);
+    margin-right: 8px;
+}
+.inventory-equip-button {
+    font-size: 10px;
+    padding: 2px 8px;
+    background-color: rgb(40, 60, 80);
+    color: rgb(150, 200, 220);
+    border-width: 0;
+    border-radius: 3px;
+}

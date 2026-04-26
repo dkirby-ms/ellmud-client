@@ -4,6 +4,14 @@
     <!-- Root container fills the screen -->
     <ui:VisualElement name="root" class="root-container">
 
+        <!-- Room background: fullscreen, behind all UI -->
+        <ui:VisualElement name="room-background" class="room-background">
+            <ui:VisualElement name="room-bg-vignette" class="room-bg-vignette" />
+            <ui:VisualElement name="room-type-info" class="room-type-info">
+                <ui:Label name="room-type-badge" text="" class="room-type-badge" />
+                <ui:Label name="room-type-label" text="" class="room-type-label" />
+            </ui:VisualElement>
+        </ui:VisualElement>
         <!-- Room Header Bar -->
         <ui:VisualElement name="room-header" class="room-header">
             <ui:Label name="room-name" text="Unknown Room" class="room-name" />
@@ -47,9 +55,20 @@
                     <ui:ScrollView name="combatants-list"
                                    class="combatants-list" />
                 </ui:VisualElement>
+
+                <!-- Minimap -->
+                <ui:VisualElement name="minimap-section" class="minimap-section">
+                    <ui:Label text="MAP" class="hud-title minimap-section-title" />
+                    <ui:VisualElement name="minimap-container"
+                                      class="minimap-container" />
+                </ui:VisualElement>
+
             </ui:VisualElement>
 
         </ui:VisualElement>
+
+        <!-- Ability Bar -->
+        <ui:VisualElement name="ability-bar" class="ability-bar" />
 
         <!-- Command Input -->
         <ui:VisualElement name="input-area" class="input-area">
@@ -60,6 +79,9 @@
         <!-- Overlay container (death, permadeath, character select) -->
         <ui:VisualElement name="overlay-container"
                           class="overlay-container hidden" />
+
+        <!-- Room transition fade overlay (always on top) -->
+        <ui:VisualElement name="room-fade-overlay" class="room-fade-overlay" />
 
     </ui:VisualElement>
 </ui:UXML>

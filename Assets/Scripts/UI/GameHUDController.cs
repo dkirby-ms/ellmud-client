@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
@@ -51,8 +52,24 @@ public class GameHUDController : MonoBehaviour
     private StashUpdateMessage cachedStash;
     private PlayerListMessage cachedPlayerList;
     private LoadoutUpdateMessage cachedLoadout;
+    private readonly Dictionary<string, ExploredRoomData> exploredRooms = new();
+    private string currentExplorationRoomId;
 
     private bool reconnecting;
+    private bool isBlockingOverlayOpen;
+
+    // Status effects
+    private VisualElement statusEffectsContainer;
+
+    // Ability bar
+    private VisualElement abilityBar;
+    private readonly Label[] abilityNameLabels = new Label[5];
+    private static readonly string[] DefaultAbilityCommands = { "attack", "skills", "wait", "flee", "look" };
+    private static readonly string[] DefaultAbilityNames = { "Attack", "Skills", "Wait", "Flee", "Look" };
+
+    // Minimap
+    private VisualElement minimapContainer;
+    private MinimapElement minimapElement;
 
     private void Awake()
     {
@@ -69,6 +86,22 @@ public class GameHUDController : MonoBehaviour
     private void OnDestroy()
     {
         UnregisterEvents();
+    }
+
+    private void Update()
+    {
+        if (commandInput != null &&
+            commandInput.focusController?.focusedElement == commandInput)
+            return;
+
+        for (var i = 0; i < 5; i++)
+        {
+            if (Input.GetKeyDown((KeyCode)((int)KeyCode.Alpha1 + i)))
+            {
+                TriggerAbilitySlot(i);
+                return;
+            }
+        }
     }
 
     private void BindUi()
@@ -91,6 +124,12 @@ public class GameHUDController : MonoBehaviour
 
         if (commandInput != null)
             commandInput.RegisterCallback<KeyDownEvent>(OnCommandInputKeyDown);
+
+        statusEffectsContainer = root.Q<VisualElement>("status-effects");
+        minimapContainer = root.Q<VisualElement>("minimap-container");
+        abilityBar = root.Q<VisualElement>("ability-bar");
+        BuildAbilityBar();
+        BuildMinimap();
     }
 
     private void RegisterEvents()
@@ -110,6 +149,8 @@ public class GameHUDController : MonoBehaviour
         GameEvents.OnStashUpdate += HandleStashUpdate;
         GameEvents.OnHelpData += HandleHelpData;
         GameEvents.OnPlayerList += HandlePlayerList;
+        GameEvents.OnExplorationData += HandleExplorationData;
+        GameEvents.OnExplorationUpdate += HandleExplorationUpdate;
     }
 
     private void UnregisterEvents()
@@ -129,6 +170,8 @@ public class GameHUDController : MonoBehaviour
         GameEvents.OnStashUpdate -= HandleStashUpdate;
         GameEvents.OnHelpData -= HandleHelpData;
         GameEvents.OnPlayerList -= HandlePlayerList;
+        GameEvents.OnExplorationData -= HandleExplorationData;
+        GameEvents.OnExplorationUpdate -= HandleExplorationUpdate;
 
         if (commandInput != null)
             commandInput.UnregisterCallback<KeyDownEvent>(OnCommandInputKeyDown);
@@ -152,17 +195,20 @@ public class GameHUDController : MonoBehaviour
 
             if (!AuthService.Instance.IsAuthenticated)
             {
+                var authenticated = false;
+
                 if (!autoLogin || string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
                 {
-                    AppendSystemLine("Not authenticated. Enable auto-login or sign in through another UI.");
-                    return;
+                    authenticated = await ShowAuthenticationOverlayAsync();
+                }
+                else
+                {
+                    authenticated = await AuthService.Instance.Login(username, password);
+                    if (!authenticated && autoRegisterIfLoginFails)
+                        authenticated = await AuthService.Instance.Register(username, password);
                 }
 
-                var loginOk = await AuthService.Instance.Login(username, password);
-                if (!loginOk && autoRegisterIfLoginFails)
-                    loginOk = await AuthService.Instance.Register(username, password);
-
-                if (!loginOk)
+                if (!authenticated)
                 {
                     AppendSystemLine("Authentication failed.");
                     return;
@@ -179,13 +225,27 @@ public class GameHUDController : MonoBehaviour
 
             if (characters == null || characters.Length == 0)
             {
-                AppendSystemLine("No character available. Create one to enter the world.");
-                return;
+                var created = await ShowCharacterSelectionOverlayAsync(Array.Empty<CharacterSummary>());
+                if (created == null)
+                {
+                    AppendSystemLine("No character available. Create one to enter the world.");
+                    return;
+                }
+
+                characters = await AuthService.Instance.FetchCharacters();
             }
 
             var active = AuthService.Instance.ActiveCharacter ?? characters[0];
-            if (AuthService.Instance.ActiveCharacter == null)
+            if (AuthService.Instance.ActiveCharacter == null && characters.Length > 1)
+            {
+                var selected = await ShowCharacterSelectionOverlayAsync(characters);
+                if (selected != null)
+                    active = selected;
+            }
+            else if (AuthService.Instance.ActiveCharacter == null)
+            {
                 active = await AuthService.Instance.SelectCharacter(active.id);
+            }
 
             if (playerNameLabel != null)
                 playerNameLabel.text = active?.name ?? "Player";
@@ -209,7 +269,8 @@ public class GameHUDController : MonoBehaviour
     {
         if (evt.keyCode == KeyCode.Escape)
         {
-            overlayContainer?.AddToClassList("hidden");
+            if (!isBlockingOverlayOpen)
+                overlayContainer?.AddToClassList("hidden");
             evt.StopPropagation();
             return;
         }
@@ -226,6 +287,13 @@ public class GameHUDController : MonoBehaviour
         var trimmed = input?.Trim();
         if (string.IsNullOrEmpty(trimmed))
             return;
+
+        if (string.Equals(trimmed, "/map", StringComparison.OrdinalIgnoreCase))
+        {
+            ShowOverlaySections("Map", BuildMapSections());
+            commandInput.value = string.Empty;
+            return;
+        }
 
         if (HandleLocalPanelCommand(trimmed))
         {
@@ -260,13 +328,13 @@ public class GameHUDController : MonoBehaviour
         switch (panelName)
         {
             case "inventory":
-                ShowOverlaySections("Inventory", BuildInventorySections());
+                ShowInventoryOverlay();
                 return true;
             case "stash":
-                ShowOverlaySections("Stash", BuildStashSections());
+                ShowStashOverlay();
                 return true;
             case "loadout":
-                ShowOverlaySections("Loadout", BuildLoadoutSections(cachedLoadout));
+                ShowLoadoutOverlay();
                 return true;
             case "help":
                 ShowOverlaySections("Help", BuildHelpSections(cachedHelpData));
@@ -274,8 +342,11 @@ public class GameHUDController : MonoBehaviour
             case "who":
                 ShowOverlaySections("Who List", BuildPlayerListSections(cachedPlayerList));
                 return true;
+            case "map":
+                ShowOverlaySections("Map", BuildMapSections());
+                return true;
             default:
-                AppendSystemLine("Unknown panel. Use /panel inventory|stash|loadout|help|who");
+                AppendSystemLine("Unknown panel. Use /panel inventory|stash|loadout|help|who|map");
                 return true;
         }
     }
@@ -323,6 +394,9 @@ public class GameHUDController : MonoBehaviour
         if (msg == null)
             return;
 
+        if (!string.IsNullOrEmpty(msg.roomSlug))
+            currentExplorationRoomId = msg.roomSlug;
+
         if (roomNameLabel != null)
             roomNameLabel.text = string.IsNullOrEmpty(msg.roomName) ? "Unknown Room" : msg.roomName;
 
@@ -361,6 +435,8 @@ public class GameHUDController : MonoBehaviour
             staminaBar.value = Mathf.Clamp(msg.stamina, 0, msg.maxStamina);
             staminaBar.title = $"Stamina {msg.stamina}/{msg.maxStamina}";
         }
+
+        RenderStatusEffects(msg.statusEffects);
     }
 
     private void HandleCombatState(CombatStateMessage msg)
@@ -428,7 +504,6 @@ public class GameHUDController : MonoBehaviour
             return;
 
         cachedLoadout = msg;
-        ShowOverlaySections("Loadout", BuildLoadoutSections(msg));
     }
 
     private void HandleInventoryUpdate(InventoryUpdateMessage msg)
@@ -457,6 +532,36 @@ public class GameHUDController : MonoBehaviour
 
         cachedPlayerList = msg;
         ShowOverlaySections("Who List", BuildPlayerListSections(msg));
+    }
+
+    private void HandleExplorationData(ExplorationDataMessage msg)
+    {
+        if (msg?.rooms == null)
+            return;
+
+        exploredRooms.Clear();
+        foreach (var room in msg.rooms)
+        {
+            if (room == null || string.IsNullOrEmpty(room.roomId))
+                continue;
+
+            exploredRooms[room.roomId] = room;
+        }
+
+        if (!string.IsNullOrEmpty(msg.currentRoomId))
+            currentExplorationRoomId = msg.currentRoomId;
+
+        RefreshMinimap();
+    }
+
+    private void HandleExplorationUpdate(ExplorationUpdateMessage msg)
+    {
+        if (msg?.room == null || string.IsNullOrEmpty(msg.room.roomId))
+            return;
+
+        exploredRooms[msg.room.roomId] = msg.room;
+        currentExplorationRoomId = msg.room.roomId;
+        RefreshMinimap();
     }
 
     private OverlaySection[] BuildHelpSections(HelpDataMessage msg)
@@ -506,6 +611,64 @@ public class GameHUDController : MonoBehaviour
             return grouped;
 
         return new[] { new OverlaySection { Title = "Players", Lines = new[] { "No players online." } } };
+    }
+
+    private OverlaySection[] BuildMapSections()
+    {
+        if (exploredRooms.Count == 0)
+        {
+            return new[]
+            {
+                new OverlaySection
+                {
+                    Title = "Map",
+                    Lines = new[] { "No exploration data received yet. Use /map again after moving." }
+                }
+            };
+        }
+
+        var sections = exploredRooms.Values
+            .GroupBy(room => string.IsNullOrEmpty(room.zoneSlug) ? "Unknown Zone" : room.zoneSlug)
+            .OrderBy(group => group.Key)
+            .Select(group => new OverlaySection
+            {
+                Title = group.Key,
+                Lines = group
+                    .OrderBy(room => room.roomName)
+                    .Select(room =>
+                    {
+                        var marker = room.roomId == currentExplorationRoomId ? "*" : " ";
+                        var roomName = string.IsNullOrEmpty(room.roomName) ? room.roomId : room.roomName;
+                        return $"{marker} {roomName} [{room.roomType}] {FormatExits(room.exits)}";
+                    })
+                    .ToArray(),
+            })
+            .ToArray();
+
+        return sections.Length > 0
+            ? sections
+            : new[] { new OverlaySection { Title = "Map", Lines = new[] { "No mapped rooms yet." } } };
+    }
+
+    private string FormatExits(SerializableExitMap exits)
+    {
+        if (exits == null)
+            return "No exits";
+
+        var list = new List<string>();
+        AddExit(list, "N", exits.north);
+        AddExit(list, "S", exits.south);
+        AddExit(list, "E", exits.east);
+        AddExit(list, "W", exits.west);
+        AddExit(list, "U", exits.up);
+        AddExit(list, "D", exits.down);
+        return list.Count == 0 ? "No exits" : string.Join(", ", list);
+    }
+
+    private void AddExit(List<string> exits, string label, string target)
+    {
+        if (!string.IsNullOrEmpty(target))
+            exits.Add(label);
     }
 
     private OverlaySection[] BuildLoadoutSections(LoadoutUpdateMessage msg)
@@ -648,6 +811,233 @@ public class GameHUDController : MonoBehaviour
         overlayContainer.Add(content);
     }
 
+    private async Task<bool> ShowAuthenticationOverlayAsync()
+    {
+        if (overlayContainer == null || AuthService.Instance == null)
+            return false;
+
+        var resultSource = new TaskCompletionSource<bool>();
+        isBlockingOverlayOpen = true;
+        overlayContainer.Clear();
+        overlayContainer.RemoveFromClassList("hidden");
+
+        var content = new VisualElement();
+        content.AddToClassList("overlay-content");
+
+        var title = new Label("Sign In");
+        title.AddToClassList("overlay-title");
+        content.Add(title);
+
+        var subtitle = new Label("Log in or create an account to continue.");
+        subtitle.AddToClassList("overlay-text");
+        content.Add(subtitle);
+
+        var usernameField = new TextField("Username")
+        {
+            value = username ?? string.Empty,
+        };
+        usernameField.AddToClassList("overlay-input");
+        content.Add(usernameField);
+
+        var passwordField = new TextField("Password")
+        {
+            value = password ?? string.Empty,
+            isPasswordField = true,
+        };
+        passwordField.AddToClassList("overlay-input");
+        content.Add(passwordField);
+
+        var status = new Label();
+        status.AddToClassList("overlay-status");
+        content.Add(status);
+
+        var buttonRow = new VisualElement();
+        buttonRow.AddToClassList("overlay-button-row");
+
+        var loginButton = new Button(async () =>
+        {
+            status.text = "Signing in...";
+            username = usernameField.value?.Trim() ?? string.Empty;
+            password = passwordField.value ?? string.Empty;
+
+            var success = await AuthService.Instance.Login(username, password);
+            if (success)
+            {
+                status.text = "Signed in.";
+                resultSource.TrySetResult(true);
+                return;
+            }
+
+            status.text = "Login failed.";
+        })
+        {
+            text = "Login",
+        };
+        loginButton.AddToClassList("overlay-button");
+        buttonRow.Add(loginButton);
+
+        var registerButton = new Button(async () =>
+        {
+            status.text = "Creating account...";
+            username = usernameField.value?.Trim() ?? string.Empty;
+            password = passwordField.value ?? string.Empty;
+
+            var success = await AuthService.Instance.Register(username, password);
+            if (success)
+            {
+                status.text = "Account created.";
+                resultSource.TrySetResult(true);
+                return;
+            }
+
+            status.text = "Registration failed.";
+        })
+        {
+            text = "Register",
+        };
+        registerButton.AddToClassList("overlay-button");
+        buttonRow.Add(registerButton);
+
+        content.Add(buttonRow);
+        overlayContainer.Add(content);
+
+        var result = await resultSource.Task;
+        overlayContainer.AddToClassList("hidden");
+        isBlockingOverlayOpen = false;
+        return result;
+    }
+
+    private async Task<CharacterSummary> ShowCharacterSelectionOverlayAsync(CharacterSummary[] characters)
+    {
+        if (overlayContainer == null || AuthService.Instance == null)
+            return null;
+
+        var available = characters ?? Array.Empty<CharacterSummary>();
+        CharacterSummary selected = AuthService.Instance.ActiveCharacter;
+        if (selected == null && available.Length > 0)
+            selected = available[0];
+
+        var resultSource = new TaskCompletionSource<CharacterSummary>();
+        isBlockingOverlayOpen = true;
+        overlayContainer.Clear();
+        overlayContainer.RemoveFromClassList("hidden");
+
+        var content = new VisualElement();
+        content.AddToClassList("overlay-content");
+
+        var title = new Label("Select Character");
+        title.AddToClassList("overlay-title");
+        content.Add(title);
+
+        var status = new Label("Choose a character or create a new one.");
+        status.AddToClassList("overlay-status");
+        content.Add(status);
+
+        var list = new ScrollView();
+        list.AddToClassList("overlay-list");
+        content.Add(list);
+
+        Action refreshList = null;
+        refreshList = () =>
+        {
+            list.contentContainer.Clear();
+
+            if (available.Length == 0)
+            {
+                list.contentContainer.Add(new Label("No characters available."));
+                return;
+            }
+
+            foreach (var character in available)
+            {
+                var captured = character;
+                var button = new Button(() =>
+                {
+                    selected = captured;
+                    status.text = $"Selected: {captured.name}";
+                    refreshList();
+                })
+                {
+                    text = $"{captured.name} ({captured.startingZoneName})",
+                };
+
+                button.AddToClassList("character-button");
+                if (selected != null && captured.id == selected.id)
+                    button.AddToClassList("character-button-active");
+
+                list.contentContainer.Add(button);
+            }
+        };
+
+        refreshList();
+
+        var createName = new TextField("New Character Name");
+        createName.AddToClassList("overlay-input");
+        content.Add(createName);
+
+        var createZone = new TextField("Starting Zone")
+        {
+            value = defaultStartingZoneSlug,
+        };
+        createZone.AddToClassList("overlay-input");
+        content.Add(createZone);
+
+        var actions = new VisualElement();
+        actions.AddToClassList("overlay-button-row");
+
+        var createButton = new Button(async () =>
+        {
+            var newName = createName.value?.Trim();
+            if (string.IsNullOrEmpty(newName))
+            {
+                status.text = "Enter a character name first.";
+                return;
+            }
+
+            status.text = "Creating character...";
+            var created = await AuthService.Instance.CreateCharacter(newName, createZone.value?.Trim());
+            if (created == null)
+            {
+                status.text = "Character creation failed.";
+                return;
+            }
+
+            var activated = await AuthService.Instance.SelectCharacter(created.id);
+            resultSource.TrySetResult(activated ?? created);
+        })
+        {
+            text = "Create",
+        };
+        createButton.AddToClassList("overlay-button");
+        actions.Add(createButton);
+
+        var enterButton = new Button(async () =>
+        {
+            if (selected == null)
+            {
+                status.text = "Select a character first.";
+                return;
+            }
+
+            status.text = "Entering world...";
+            var activated = await AuthService.Instance.SelectCharacter(selected.id);
+            resultSource.TrySetResult(activated ?? selected);
+        })
+        {
+            text = "Enter World",
+        };
+        enterButton.AddToClassList("overlay-button");
+        actions.Add(enterButton);
+
+        content.Add(actions);
+        overlayContainer.Add(content);
+
+        var result = await resultSource.Task;
+        overlayContainer.AddToClassList("hidden");
+        isBlockingOverlayOpen = false;
+        return result;
+    }
+
     private void RenderExits(string[] exits)
     {
         if (exitsContainer == null)
@@ -686,5 +1076,306 @@ public class GameHUDController : MonoBehaviour
 
         terminalContent.Add(line);
         terminalScroll?.ScrollTo(line);
+    }
+
+    // ── Status Effects ────────────────────────────────────
+
+    private void RenderStatusEffects(StatusEffect[] effects)
+    {
+        if (statusEffectsContainer == null)
+            return;
+
+        statusEffectsContainer.Clear();
+        if (effects == null || effects.Length == 0)
+            return;
+
+        foreach (var effect in effects)
+        {
+            var badge = new Label($"{effect.name} ({effect.remainingTicks})");
+            badge.AddToClassList("status-effect-tag");
+            badge.tooltip = $"{effect.name}: {effect.remainingTicks} tick(s) remaining";
+            statusEffectsContainer.Add(badge);
+        }
+    }
+
+    // ── Ability Bar ───────────────────────────────────────
+
+    private void BuildAbilityBar()
+    {
+        if (abilityBar == null)
+            return;
+
+        abilityBar.Clear();
+
+        for (var i = 0; i < 5; i++)
+        {
+            var index = i;
+
+            var slot = new VisualElement();
+            slot.name = $"ability-slot-{i}";
+            slot.AddToClassList("ability-slot");
+
+            var keyLabel = new Label((i + 1).ToString());
+            keyLabel.AddToClassList("ability-key");
+            slot.Add(keyLabel);
+
+            var nameLabel = new Label(DefaultAbilityNames[i]);
+            nameLabel.AddToClassList("ability-name");
+            abilityNameLabels[i] = nameLabel;
+            slot.Add(nameLabel);
+
+            slot.RegisterCallback<ClickEvent>(_ => TriggerAbilitySlot(index));
+            abilityBar.Add(slot);
+        }
+    }
+
+    private void TriggerAbilitySlot(int index)
+    {
+        if (index < 0 || index >= 5)
+            return;
+
+        if (EllmudNetworkManager.Instance == null || !EllmudNetworkManager.Instance.IsConnected)
+            return;
+
+        var slot = abilityBar?.Q<VisualElement>($"ability-slot-{index}");
+        if (slot != null)
+        {
+            slot.AddToClassList("ability-slot--active");
+            slot.schedule.Execute(() => slot.RemoveFromClassList("ability-slot--active"))
+                .StartingIn(200);
+        }
+
+        var verb = DefaultAbilityCommands[index];
+        EllmudNetworkManager.Instance.SendCommand(verb);
+    }
+
+    // ── Minimap ───────────────────────────────────────────
+
+    private void BuildMinimap()
+    {
+        if (minimapContainer == null)
+            return;
+
+        minimapElement = new MinimapElement();
+        minimapContainer.Add(minimapElement);
+    }
+
+    private void RefreshMinimap()
+    {
+        minimapElement?.UpdateMap(exploredRooms, currentExplorationRoomId);
+    }
+
+    // ── Inventory Overlay ─────────────────────────────────
+
+    private void ShowInventoryOverlay()
+    {
+        if (overlayContainer == null)
+            return;
+
+        overlayContainer.Clear();
+        overlayContainer.RemoveFromClassList("hidden");
+
+        var content = new VisualElement();
+        content.AddToClassList("overlay-content");
+        content.style.maxWidth = 600;
+
+        var title = new Label("Inventory");
+        title.AddToClassList("overlay-title");
+        content.Add(title);
+
+        if (cachedInventory != null)
+        {
+            var weightLabel = new Label(
+                $"Weight: {cachedInventory.currentWeight:F1} / {cachedInventory.maxWeight:F1}");
+            weightLabel.AddToClassList("overlay-text");
+            content.Add(weightLabel);
+        }
+
+        var list = new ScrollView();
+        list.AddToClassList("overlay-list");
+        list.style.maxHeight = 320;
+        content.Add(list);
+
+        if (cachedInventory?.items == null || cachedInventory.items.Length == 0)
+        {
+            var empty = new Label("Inventory is empty.");
+            empty.AddToClassList("overlay-text");
+            list.contentContainer.Add(empty);
+        }
+        else
+        {
+            foreach (var item in cachedInventory.items)
+            {
+                var row = new VisualElement();
+                row.AddToClassList("inventory-item-row");
+
+                var nameLabel = new Label(item.name ?? "Unknown");
+                nameLabel.AddToClassList("inventory-item-name");
+                row.Add(nameLabel);
+
+                var metaLabel = new Label($"{item.tier} · {item.type} · {item.weight:F1} wt");
+                metaLabel.AddToClassList("inventory-item-meta");
+                row.Add(metaLabel);
+
+                if (item.allowedSlots != null && item.allowedSlots.Length > 0)
+                {
+                    var capturedItem = item;
+                    var equipBtn = new Button(() =>
+                    {
+                        EllmudNetworkManager.Instance?.SendMessage(
+                            MessageTypes.EQUIP_ITEM,
+                            new EquipItemMessage
+                            {
+                                itemId = capturedItem.instanceId,
+                                targetSlot = capturedItem.allowedSlots[0],
+                            });
+                        overlayContainer.AddToClassList("hidden");
+                    })
+                    {
+                        text = "Equip",
+                    };
+                    equipBtn.AddToClassList("inventory-equip-button");
+                    row.Add(equipBtn);
+                }
+
+                list.contentContainer.Add(row);
+            }
+        }
+
+        var closeBtn = new Button(() => overlayContainer.AddToClassList("hidden")) { text = "Close" };
+        closeBtn.AddToClassList("overlay-button");
+        content.Add(closeBtn);
+
+        overlayContainer.Add(content);
+    }
+
+    // ── Stash Overlay ─────────────────────────────────────
+
+    private void ShowStashOverlay()
+    {
+        if (overlayContainer == null)
+            return;
+
+        overlayContainer.Clear();
+        overlayContainer.RemoveFromClassList("hidden");
+
+        var content = new VisualElement();
+        content.AddToClassList("overlay-content");
+        content.style.maxWidth = 560;
+
+        var title = new Label("Stash");
+        title.AddToClassList("overlay-title");
+        content.Add(title);
+
+        var list = new ScrollView();
+        list.AddToClassList("overlay-list");
+        list.style.maxHeight = 320;
+        content.Add(list);
+
+        if (cachedStash?.items == null || cachedStash.items.Length == 0)
+        {
+            var empty = new Label("Stash is empty.");
+            empty.AddToClassList("overlay-text");
+            list.contentContainer.Add(empty);
+        }
+        else
+        {
+            foreach (var item in cachedStash.items)
+            {
+                var row = new VisualElement();
+                row.AddToClassList("inventory-item-row");
+
+                var nameLabel = new Label(item.name ?? "Unknown");
+                nameLabel.AddToClassList("inventory-item-name");
+                row.Add(nameLabel);
+
+                var metaLabel = new Label($"{item.tier} · {item.type}");
+                metaLabel.AddToClassList("inventory-item-meta");
+                row.Add(metaLabel);
+
+                list.contentContainer.Add(row);
+            }
+        }
+
+        var closeBtn = new Button(() => overlayContainer.AddToClassList("hidden")) { text = "Close" };
+        closeBtn.AddToClassList("overlay-button");
+        content.Add(closeBtn);
+
+        overlayContainer.Add(content);
+    }
+
+    // ── Loadout (Equipment) Overlay ───────────────────────
+
+    private void ShowLoadoutOverlay()
+    {
+        if (overlayContainer == null)
+            return;
+
+        overlayContainer.Clear();
+        overlayContainer.RemoveFromClassList("hidden");
+
+        var content = new VisualElement();
+        content.AddToClassList("overlay-content");
+        content.style.maxWidth = 480;
+
+        var title = new Label("Equipment");
+        title.AddToClassList("overlay-title");
+        content.Add(title);
+
+        var slots = cachedLoadout?.slots;
+        var slotsContainer = new VisualElement();
+        content.Add(slotsContainer);
+
+        void AddSlotRow(string slotLabel, string slotName, ItemData item)
+        {
+            var row = new VisualElement();
+            row.AddToClassList("equipment-slot-row");
+
+            var label = new Label(slotLabel);
+            label.AddToClassList("equipment-slot-label");
+            row.Add(label);
+
+            var itemLabel = new Label(item != null ? $"{item.name} ({item.tier})" : "Empty");
+            itemLabel.AddToClassList("equipment-slot-item");
+            if (item == null)
+                itemLabel.AddToClassList("equipment-slot-item--empty");
+            row.Add(itemLabel);
+
+            if (item != null)
+            {
+                var capturedSlot = slotName;
+                var unequipBtn = new Button(() =>
+                {
+                    EllmudNetworkManager.Instance?.SendMessage(
+                        MessageTypes.UNEQUIP_ITEM,
+                        new UnequipItemMessage { slot = capturedSlot });
+                    overlayContainer.AddToClassList("hidden");
+                })
+                {
+                    text = "Unequip",
+                };
+                unequipBtn.AddToClassList("equipment-unequip-button");
+                row.Add(unequipBtn);
+            }
+
+            slotsContainer.Add(row);
+        }
+
+        AddSlotRow("Head",     "head",    slots?.head);
+        AddSlotRow("Chest",    "chest",   slots?.chest);
+        AddSlotRow("Legs",     "legs",    slots?.legs);
+        AddSlotRow("Feet",     "feet",    slots?.feet);
+        AddSlotRow("Hands",    "hands",   slots?.hands);
+        AddSlotRow("Weapon",   "weapon",  slots?.weapon);
+        AddSlotRow("Off-Hand", "offhand", slots?.offhand);
+        AddSlotRow("Ring 1",   "ring1",   slots?.ring1);
+        AddSlotRow("Ring 2",   "ring2",   slots?.ring2);
+        AddSlotRow("Amulet",   "amulet",  slots?.amulet);
+
+        var closeBtn = new Button(() => overlayContainer.AddToClassList("hidden")) { text = "Close" };
+        closeBtn.AddToClassList("overlay-button");
+        content.Add(closeBtn);
+
+        overlayContainer.Add(content);
     }
 }
