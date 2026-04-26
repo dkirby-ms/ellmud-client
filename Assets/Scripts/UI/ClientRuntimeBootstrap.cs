@@ -6,7 +6,7 @@ using UnityEngine.UIElements;
 /// </summary>
 public static class ClientRuntimeBootstrap
 {
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
         EnsureComponent<AuthService>("AuthService");
@@ -14,6 +14,10 @@ public static class ClientRuntimeBootstrap
         EnsureComponent<GameStateManager>("GameStateManager");
 
         if (Object.FindAnyObjectByType<GameHUDController>() != null)
+            return;
+
+        // Respect scene-authored UI so bootstrap fallback does not create a second panel.
+        if (Object.FindAnyObjectByType<UIDocument>() != null)
             return;
 
         var panelSettings = Resources.Load<PanelSettings>("UI/PanelSettings");

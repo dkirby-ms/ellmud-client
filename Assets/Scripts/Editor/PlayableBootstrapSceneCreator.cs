@@ -9,8 +9,8 @@ internal static class PlayableBootstrapSceneCreator
 {
     private const string SceneFolderPath = "Assets/Scenes";
     private const string ScenePath = "Assets/Scenes/PlayableBootstrap.unity";
-    private const string PanelSettingsPath = "Assets/UI/PanelSettings.asset";
-    private const string GameHudPath = "Assets/UI/GameHUD.uxml";
+    private const string PanelSettingsPath = "Assets/Resources/UI/PanelSettings.asset";
+    private const string GameHudPath = "Assets/Resources/UI/GameHUD.uxml";
 
     [MenuItem("Ellmud/Create Playable Bootstrap Scene")]
     private static void CreatePlayableBootstrapScene()

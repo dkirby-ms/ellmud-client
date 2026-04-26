@@ -68,14 +68,22 @@ public class RoomBackgroundController : MonoBehaviour
     {
         var uiDocument = GetComponent<UIDocument>();
 
-        // Apply this unconditionally, before any rootVisualElement null-check.
-        // Unity sets a camera-capturing lambda on PanelSettings in ScreenSpaceOverlay mode;
-        // when that camera reference is null the lambda throws every mouse-move frame.
-        // An identity function is correct for screen-space overlays (screen == panel coords).
-        uiDocument?.panelSettings?.SetScreenToPanelSpaceFunction(p => p);
-
-        if (uiDocument?.rootVisualElement == null)
+        if (uiDocument == null)
+        {
+            Debug.LogWarning($"[{nameof(RoomBackgroundController)}] No UIDocument found on '{name}'. Component will be inactive.", this);
             return;
+        }
+
+        if (uiDocument.panelSettings == null)
+        {
+            Debug.LogWarning($"[{nameof(RoomBackgroundController)}] UIDocument on '{name}' has no PanelSettings assigned. Pointer events may not work correctly.", this);
+        }
+
+        if (uiDocument.rootVisualElement == null)
+        {
+            Debug.LogWarning($"[{nameof(RoomBackgroundController)}] UIDocument on '{name}' has no rootVisualElement. Check that a VisualTreeAsset is assigned.", this);
+            return;
+        }
 
         var root = uiDocument.rootVisualElement;
         backgroundElement = root.Q<VisualElement>("room-background");
